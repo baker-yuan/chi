@@ -13,6 +13,7 @@ import (
 	"strings"
 )
 
+// http方法类型
 type methodTyp uint
 
 const (
@@ -74,54 +75,67 @@ func RegisterMethod(method string) {
 	mALL |= mt
 }
 
+// 节点类型
 type nodeTyp uint8
 
 const (
-	ntStatic   nodeTyp = iota // /home
-	ntRegexp                  // /{id:[0-9]+}
-	ntParam                   // /{user}
-	ntCatchAll                // /api/v1/*
+	ntStatic   nodeTyp = iota // 静态节点，例如 /home
+	ntRegexp                  // 正则表达式节点，例如 /{id:[0-9]+}
+	ntParam                   // 参数节点，例如 /{user}
+	ntCatchAll                // 捕获所有的节点，例如 /api/v1/*
 )
 
 type node struct {
 	// subroutes on the leaf node
+	// 存储叶子节点上的子路由
 	subroutes Routes
 
 	// regexp matcher for regexp nodes
+	// 存储正则表达式节点的匹配器
 	rex *regexp.Regexp
 
 	// HTTP handler endpoints on the leaf node
+	// 存储叶子节点上的HTTP处理器端点
 	endpoints endpoints
 
 	// prefix is the common prefix we ignore
+	// 忽略的公共前缀
 	prefix string
 
 	// child nodes should be stored in-order for iteration,
 	// in groups of the node type.
+	// 存储子节点。子节点应该按照节点类型的顺序存储
 	children [ntCatchAll + 1]nodes
 
 	// first byte of the child prefix
+	// 子前缀的第一个字节
 	tail byte
 
 	// node type: static, regexp, param, catchAll
+	// 节点类型：静态、正则表达式、参数、捕获所有
 	typ nodeTyp
 
 	// first byte of the prefix
+	// 这是一个字节，表示前缀的第一个字节
 	label byte
 }
 
 // endpoints is a mapping of http method constants to handlers
 // for a given route.
+// 这是一个映射类型，键是methodTyp类型，值是指向endpoint类型的指针。这个类型用于给定路由的HTTP方法到处理器的映射。
 type endpoints map[methodTyp]*endpoint
 
 type endpoint struct {
 	// endpoint handler
+	// 这是一个http.Handler类型的字段，表示端点处理器。http.Handler是一个接口，任何实现了ServeHTTP(ResponseWriter, *Request)方法的类型都实现了这个接口，可以作为HTTP处理器。
 	handler http.Handler
 
 	// pattern is the routing pattern for handler nodes
+	// 表示处理器节点的路由模式。
 	pattern string
 
 	// parameter keys recorded on handler nodes
+	// 记录了处理器节点上的参数键。
 	paramKeys []string
 }
 

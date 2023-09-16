@@ -18,32 +18,42 @@ var _ Router = &Mux{}
 // modular and composable HTTP services with a large set of handlers. It's
 // particularly useful for writing large REST API services that break a handler
 // into many smaller parts composed of middlewares and end handlers.
+//
+// Mux实现了http.Handler接口，因此它可以处理HTTP请求。它的设计目标是快速、简洁并提供强大的API，用于构建由大量处理器组成的模块化和可组合的HTTP服务。
 type Mux struct {
 	// The computed mux handler made of the chained middleware stack and
 	// the tree router
+	// 这是一个http.Handler类型的字段，它是由中间件堆栈和树形路由器组成的处理器。
 	handler http.Handler
 
 	// The radix trie router
+	// 这是一个指向node类型的指针，表示基数树路由器，用于存储和匹配路由。
 	tree *node
 
 	// Custom method not allowed handler
+	// 是一个http.HandlerFunc类型的字段，用于处理HTTP方法不被允许的情况。
 	methodNotAllowedHandler http.HandlerFunc
 
 	// A reference to the parent mux used by subrouters when mounting
 	// to a parent mux
+	// 这是一个指向Mux类型的指针，表示父路由器，子路由器在挂载到父路由器时会用到。
 	parent *Mux
 
 	// Routing context pool
+	// 这是一个sync.Pool类型的字段，表示路由上下文池，用于存储和复用路由上下文。
 	pool *sync.Pool
 
 	// Custom route not found handler
+	// 这是一个http.HandlerFunc类型的字段，用于处理路由未找到的情况。
 	notFoundHandler http.HandlerFunc
 
 	// The middleware stack
+	// 这是一个函数切片，每个函数接收一个http.Handler并返回一个http.Handler，表示中间件堆栈。
 	middlewares []func(http.Handler) http.Handler
 
 	// Controls the behaviour of middleware chain generation when a mux
 	// is registered as an inline group inside another mux.
+	// 这是一个布尔值，用于控制当一个路由器作为另一个路由器中的内联组注册时，中间件链生成的行为。
 	inline bool
 }
 
@@ -63,6 +73,7 @@ func NewMux() *Mux {
 // ServeHTTP is the single method of the http.Handler interface that makes
 // Mux interoperable with the standard library. It uses a sync.Pool to get and
 // reuse routing contexts for each request.
+// http请求入口
 func (mx *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Ensure the mux has some routes defined on the mux
 	if mx.handler == nil {
@@ -89,6 +100,7 @@ func (mx *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// NOTE: r.WithContext() causes 2 allocations and context.WithValue() causes 1 allocation
 	r = r.WithContext(context.WithValue(r.Context(), RouteCtxKey, rctx))
 
+	// 调用的是mx.handler
 	// Serve the request and once its done, put the request context back in the sync pool
 	mx.handler.ServeHTTP(w, r)
 	mx.pool.Put(rctx)
@@ -403,6 +415,7 @@ func (mx *Mux) handle(method methodTyp, pattern string, handler http.Handler) *n
 	// Build endpoint handler with inline middlewares for the route
 	var h http.Handler
 	if mx.inline {
+		// mx.routeHTTP 用于路由匹配
 		mx.handler = http.HandlerFunc(mx.routeHTTP)
 		h = Chain(mx.middlewares...).Handler(handler)
 	} else {
@@ -415,6 +428,7 @@ func (mx *Mux) handle(method methodTyp, pattern string, handler http.Handler) *n
 
 // routeHTTP routes a http.Request through the Mux routing tree to serve
 // the matching handler for a particular http method.
+// 路由匹配入口
 func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Grab the route context object
 	rctx := r.Context().Value(RouteCtxKey).(*Context)
@@ -442,11 +456,13 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 查找路由
 	// Find the route
 	if _, _, h := mx.tree.FindRoute(rctx, method, routePath); h != nil {
 		h.ServeHTTP(w, r)
 		return
 	}
+
 	if rctx.methodNotAllowed {
 		mx.MethodNotAllowedHandler(rctx.methodsAllowed...).ServeHTTP(w, r)
 	} else {

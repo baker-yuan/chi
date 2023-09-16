@@ -85,6 +85,7 @@ const (
 	ntCatchAll                // 捕获所有的节点，例如 /api/v1/*
 )
 
+// 节点
 type node struct {
 	// subroutes on the leaf node
 	// 存储叶子节点上的子路由

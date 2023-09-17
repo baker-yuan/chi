@@ -124,7 +124,7 @@ type node struct {
 // endpoints is a mapping of http method constants to handlers
 // for a given route.
 // 这是一个映射类型，键是methodTyp类型，值是指向endpoint类型的指针。这个类型用于给定路由的HTTP方法到处理器的映射。
-type endpoints map[methodTyp]*endpoint
+type endpoints map[methodTyp]*endpoint // 路由一摸一样，只是http方法类型不一样 key=http方法类型 value=处理函数信息
 
 type endpoint struct {
 	// endpoint handler
@@ -149,11 +149,19 @@ func (s endpoints) Value(method methodTyp) *endpoint {
 	return mh
 }
 
+// InsertRoute
+// 根据输入的路由模式（pattern）在路由树中寻找或创建对应的节点，并将HTTP处理器（handler）和HTTP方法（method）设置到对应的节点上。
+//
+// 三个参数：
+// method（HTTP方法类型，如GET、POST等），
+// pattern（路由模式，如"/users/{id}"），
+// handler（处理该路由的HTTP处理器）。这个方法绑定在node类型上，返回一个node类型的指针。
 func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handler) *node {
-	var parent *node
-	search := pattern
+	var parent *node  //
+	search := pattern //
 
 	for {
+		// 如果搜索的路由模式（search）为空，说明已经处理完所有的路由段，将HTTP处理器和HTTP方法设置到当前节点上，并返回当前节点。
 		// Handle key exhaustion
 		if len(search) == 0 {
 			// Insert or update the node's leaf handler
@@ -161,22 +169,25 @@ func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handle
 			return n
 		}
 
+		// 如果搜索的路由模式的第一个字符是'{'或'*'，说明这是一个参数或通配符节点，使用patNextSegment函数解析出路由段的类型、正则表达式模式、尾部字符、结束索引等信息。
 		// We're going to be searching for a wild node next,
 		// in this case, we need to get the tail
-		var label = search[0]
-		var segTail byte
-		var segEndIdx int
-		var segTyp nodeTyp
-		var segRexpat string
+		var label = search[0] // 取搜索的路由模式的第一个字符作为标签
+
+		var segTyp nodeTyp   // 节点类型
+		var segRexpat string // 正则表达式模式
+		var segTail byte     // 参数尾部字符
+		var segEndIdx int    // 参数结束索引
 		if label == '{' || label == '*' {
 			segTyp, _, segRexpat, segTail, _, segEndIdx = patNextSegment(search)
 		}
 
 		var prefix string
-		if segTyp == ntRegexp {
+		if segTyp == ntRegexp { // 正则表达式节点
 			prefix = segRexpat
 		}
 
+		// 在当前节点的子节点中查找与路由段匹配的节点。如果找不到匹配的子节点，函数会创建一个新的子节点，并将HTTP处理器和HTTP方法设置到新的子节点上，然后返回新的子节点。
 		// Look for the edge to attach to
 		parent = n
 		n = n.getEdge(segTyp, label, segTail, prefix)
@@ -186,12 +197,13 @@ func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handle
 			child := &node{label: label, tail: segTail, prefix: search}
 			hn := parent.addChild(child, search)
 			hn.setEndpoint(method, handler, pattern)
-
 			return hn
 		}
 
+		// 找到了匹配的子节点，函数会根据子节点的类型进行处理。
 		// Found an edge to match the pattern
 
+		// 子节点是参数或通配符节点，函数会从搜索的路由模式中移除已匹配的部分，然后继续下一轮循环。
 		if n.typ > ntStatic {
 			// We found a param node, trim the param from the search path and continue.
 			// This param/wild pattern segment would already be on the tree from a previous
@@ -200,6 +212,8 @@ func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handle
 			continue
 		}
 
+		// 子节点是静态节点，函数会计算搜索的路由模式和子节点前缀的最长公共前缀，然后根据最长公共前缀的长度进行处理。
+		// 最长公共前缀的长度等于子节点前缀的长度，函数会从搜索的路由模式中移除已匹配的部分，然后继续下一轮循环。
 		// Static nodes fall below here.
 		// Determine longest prefix of the search key on match.
 		commonPrefix := longestPrefix(search, n.prefix)
@@ -210,11 +224,13 @@ func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handle
 			continue
 		}
 
+		// 最长公共前缀的长度小于子节点前缀的长度，函数会创建一个新的子节点，类型是静态，前缀是search和子节点前缀的最长公共前缀。
 		// Split the node
 		child := &node{
 			typ:    ntStatic,
 			prefix: search[:commonPrefix],
 		}
+		// 在parent节点中替换子节点，并更新找到的子节点的标签和前缀。接着，函数会将找到的子节点添加到新的子节点下。
 		parent.replaceChild(search[0], segTail, child)
 
 		// Restore the existing node
@@ -222,6 +238,7 @@ func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handle
 		n.prefix = n.prefix[commonPrefix:]
 		child.addChild(n, n.prefix)
 
+		// 函数会从search中移除已匹配的部分。如果search的长度为0，说明已经处理完所有的路由段，函数会将HTTP处理器和HTTP方法设置到新的子节点上，并返回新的子节点。
 		// If the new key is a subset, set the method/handler on this node and finish.
 		search = search[commonPrefix:]
 		if len(search) == 0 {
@@ -229,6 +246,7 @@ func (n *node) InsertRoute(method methodTyp, pattern string, handler http.Handle
 			return child
 		}
 
+		// search的长度不为0，函数会创建一个新的子节点，类型是静态，标签是search的第一个字符，前缀是search，然后将新的子节点添加到新的子节点下，并将HTTP处理器和HTTP方法设置到新的子节点上，然后返回新的子节点。
 		// Create a new edge for the node
 		subchild := &node{
 			typ:    ntStatic,
@@ -411,11 +429,16 @@ func (n *node) FindRoute(rctx *Context, method methodTyp, path string) (*node, e
 
 // Recursive edge traversal by checking all nodeTyp groups along the way.
 // It's like searching through a multi-dimensional radix trie.
+//
+// 在路由树中查找匹配的路由
+// 三个参数：一个路由上下文rctx，一个HTTP方法method，和一个路径path。
 func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 	nn := n
 	search := path
 
+	// 遍历当前节点的所有子节点，根据子节点的类型进行不同的处理
 	for t, nds := range nn.children {
+		// 节点类型
 		ntyp := nodeTyp(t)
 		if len(nds) == 0 {
 			continue
@@ -430,13 +453,14 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 		}
 
 		switch ntyp {
+		// 子节点是静态类型（ntStatic），则查找与路径首字符匹配的子节点。如果找到匹配的子节点，并且该子节点的前缀是路径的前缀，则更新搜索路径，剔除已匹配的前缀部分。
 		case ntStatic:
 			xn = nds.findEdge(label)
 			if xn == nil || !strings.HasPrefix(xsearch, xn.prefix) {
 				continue
 			}
 			xsearch = xsearch[len(xn.prefix):]
-
+		// 子节点是参数类型（ntParam）或正则表达式类型（ntRegexp），则查找路径中与子节点尾部分隔符匹配的部分。如果找到匹配的部分，并且该部分满足正则表达式或不包含'/'字符，则将该部分添加到路由参数中，并更新搜索路径，剔除已匹配的部分。
 		case ntParam, ntRegexp:
 			// short-circuit and return no matching route for empty param values
 			if xsearch == "" {
@@ -508,6 +532,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 			rctx.routeParams.Values = append(rctx.routeParams.Values, "")
 
 		default:
+			// 子节点是其他类型，则将整个路径添加到路由参数中，并将搜索路径设置为空。
 			// catch-all nodes
 			rctx.routeParams.Values = append(rctx.routeParams.Values, search)
 			xn = nds[0]
@@ -518,6 +543,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 			continue
 		}
 
+		// 如果搜索路径为空，且子节点是叶子节点，且子节点有对应的处理函数，则将子节点的参数键添加到路由参数中，并返回子节点。
 		// did we find it yet?
 		if len(xsearch) == 0 {
 			if xn.isLeaf() {
@@ -540,6 +566,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 			}
 		}
 
+		// 搜索路径不为空，或子节点不是叶子节点，或子节点没有对应的处理函数，则递归调用findRoute函数，继续在子节点的子节点中查找匹配的路由。
 		// recursively find the next node..
 		fin := xn.findRoute(rctx, method, xsearch)
 		if fin != nil {
@@ -555,6 +582,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 
 	}
 
+	// 在所有子节点中都没有找到匹配的路由，则返回nil。
 	return nil
 }
 
@@ -701,25 +729,65 @@ func (n *node) walk(fn func(eps endpoints, subroutes Routes) bool) bool {
 
 // patNextSegment returns the next segment details from a pattern:
 // node type, param key, regexp string, param tail byte, param starting index, param ending index
+//
+// 这个函数的主要目的是解析路由模式中的下一个路由段，并返回路由段的详细信息，包括节点类型、参数键、正则表达式模式、参数尾部字符、参数开始索引和参数结束索引。
+//
+// 假设我们有以下路由模式：
+// 1. "/users/{userID}"
+// 2. "/users/{userID:[0-9]+}"
+// 3. "/files/*"
+//
+// 对于第一个路由模式，我们可以调用`patNextSegment("/users/{userID}")`，函数会返回以下结果：
+// - 节点类型：ntParam（表示这是一个参数节点）
+// - 参数键："userID"
+// - 正则表达式模式：""
+// - 参数尾部字符：'/'
+// - 参数开始索引：7（'{'字符在路由模式中的位置）
+// - 参数结束索引：15（'}'字符在路由模式中的位置）
+//
+// 对于第二个路由模式，我们可以调用`patNextSegment("/users/{userID:[0-9]+}")`，函数会返回以下结果：
+// - 节点类型：ntRegexp（表示这是一个正则表达式节点）
+// - 参数键："userID"
+// - 正则表达式模式："^[0-9]+$"（函数会自动添加'^'和'$'）
+// - 参数尾部字符：'/'
+// - 参数开始索引：6（'{'字符在路由模式中的位置）
+// - 参数结束索引：20（'}'字符在路由模式中的位置）
+//
+// 对于第三个路由模式，我们可以调用`patNextSegment("/files/*")`，函数会返回以下结果：
+// - 节点类型：ntCatchAll（表示这是一个通配符节点）
+// - 参数键："*"
+// - 正则表达式模式：""
+// - 参数尾部字符：0
+// - 参数开始索引：7（'*'字符在路由模式中的位置）
+// - 参数结束索引：8（路由模式的长度）
+//
+// 这些结果可以用于在路由树中插入新的路由。
 func patNextSegment(pattern string) (nodeTyp, string, string, byte, int, int) {
+	// 查找路由模式中的'{'和'*'字符的位置。如果找不到这两个字符，说明这是一个静态节点，函数会返回静态节点类型和整个路由模式。
 	ps := strings.Index(pattern, "{")
 	ws := strings.Index(pattern, "*")
-
 	if ps < 0 && ws < 0 {
 		return ntStatic, "", "", 0, 0, len(pattern) // we return the entire thing
 	}
 
+	// 检查'{'和''字符的位置。如果''字符在'{'字符之前，函数会抛出一个panic，因为在路由模式中，通配符节点必须是最后一个节点。
 	// Sanity check
 	if ps >= 0 && ws >= 0 && ws < ps {
 		panic("chi: wildcard '*' must be the last pattern in a route, otherwise use a '{param}'")
 	}
 
+	// 设置默认的参数尾部字符为'/'。
 	var tail byte = '/' // Default endpoint tail to / byte
 
+	// 找到了'{'字符，说明这是一个参数节点或正则表达式节点。
+	// 参数节点 /{user}
+	// 正则表达式节点 /{id:[0-9]+}
 	if ps >= 0 {
 		// Param/Regexp pattern is next
+		// 参数节点
 		nt := ntParam
 
+		// 会查找与'{'字符匹配的'}'字符，并检查是否存在嵌套的'{'和'}'字符。如果找不到匹配的'}'字符，函数会抛出一个panic。
 		// Read to closing } taking into account opens and closes in curl count (cc)
 		cc := 0
 		pe := ps
@@ -738,6 +806,7 @@ func patNextSegment(pattern string) (nodeTyp, string, string, byte, int, int) {
 			panic("chi: route param closing delimiter '}' is missing")
 		}
 
+		// 提取出参数键，并检查参数键中是否包含':'字符。如果包含':'字符，说明这是一个正则表达式节点，函数会提取出正则表达式模式，并检查正则表达式模式是否以'^'开始和'$'结束，如果不是，函数会添加'^'和'$'。
 		key := pattern[ps+1 : pe]
 		pe++ // set end to next position
 
@@ -747,7 +816,7 @@ func patNextSegment(pattern string) (nodeTyp, string, string, byte, int, int) {
 
 		var rexpat string
 		if idx := strings.Index(key, ":"); idx >= 0 {
-			nt = ntRegexp
+			nt = ntRegexp // 正则表达式节点
 			rexpat = key[idx+1:]
 			key = key[:idx]
 		}
@@ -761,9 +830,12 @@ func patNextSegment(pattern string) (nodeTyp, string, string, byte, int, int) {
 			}
 		}
 
+		// 返回节点类型、参数键、正则表达式模式、参数尾部字符、参数开始索引和参数结束索引。
 		return nt, key, rexpat, tail, ps, pe
 	}
 
+	// 如果找到了''字符，说明这是一个通配符节点。函数会检查''字符是否是路由模式的最后一个字符，如果不是，函数会抛出一个panic。
+	// 然后，函数会返回通配符节点类型、''字符、空字符串、0、''字符的位置和路由模式的长度。
 	// Wildcard pattern as finale
 	if ws < len(pattern)-1 {
 		panic("chi: wildcard '*' must be the last value in a route. trim trailing text or use a '{param}' instead")

@@ -7,6 +7,37 @@ import (
 	"testing"
 )
 
+func TestPatNextSegment(t *testing.T) {
+	var (
+		// 节点类型、参数键、正则表达式模式、参数尾部字符、参数开始索引和参数结束索引
+		nt     nodeTyp
+		key    string
+		rexpat string
+		tail   byte
+		ps     int
+		pe     int
+	)
+	nt, key, rexpat, tail, ps, pe = patNextSegment("/users/{userID}")
+	nt, key, rexpat, tail, ps, pe = patNextSegment("/files/*")
+
+	fmt.Println(nt, key, rexpat, tail, ps, pe)
+}
+
+func TestTree_1(t *testing.T) {
+	hStub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	hStub2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	hStub3 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	hStub4 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	tree := &node{}
+	tree.InsertRoute(mGET, "/article/{id}", hStub)
+	tree.InsertRoute(mPOST, "/article/{id}", hStub2)
+	tree.InsertRoute(mPUT, "/article/{id}", hStub3)
+	tree.InsertRoute(mPATCH, "/article/{id}", hStub4)
+
+	fmt.Println()
+}
+
 func TestTree(t *testing.T) {
 	hStub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	hIndex := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})

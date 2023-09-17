@@ -106,7 +106,12 @@ type node struct {
 	// child nodes should be stored in-order for iteration,
 	// in groups of the node type.
 	// 存储子节点。子节点应该按照节点类型的顺序存储
-	children [ntCatchAll + 1]nodes
+	//
+	// 静态节点，例如 /home
+	// 正则表达式节点，例如 /{id:[0-9]+}
+	// 参数节点，例如 /{user}
+	// 捕获所有的节点，例如 /api/v1/*
+	children [ntCatchAll + 1]nodes // 声明一个长度为ntCatchAll+1的[]*node
 
 	// first byte of the child prefix
 	// 子前缀的第一个字节
@@ -402,6 +407,7 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
 	}
 }
 
+// 查找路由
 func (n *node) FindRoute(rctx *Context, method methodTyp, path string) (*node, endpoints, http.Handler) {
 	// Reset the context routing pattern and params
 	rctx.routePattern = ""

@@ -8,6 +8,7 @@ import (
 )
 
 // https://zhuanlan.zhihu.com/p/410876593
+// https://www.cnblogs.com/jiujuan/p/15973485.html
 func TestPatNextSegment(t *testing.T) {
 	var (
 		// 节点类型、参数键、正则表达式模式、参数尾部字符、参数开始索引和参数结束索引
